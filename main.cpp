@@ -1,21 +1,10 @@
 #include <iostream>
 #include <string>
-#include "CommandReader.h"
+#include "command_handler.h"
 
-
-class CommandProcessor {
-public:
-    CommandProcessor();
-    ~CommandProcessor();
-
-    void print_commands();
-
-private:
-
-};
 
 int main() {
-
+    CommandHandler(1);
 
     return 0;
 }
