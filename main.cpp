@@ -4,7 +4,7 @@
 
 
 int main() {
-    CommandHandler(1);
+    CommandHandler(3);
 
     return 0;
 }

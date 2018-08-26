@@ -19,6 +19,11 @@ public:
         m_commands.push(name);
     }
 
+    virtual void clear() {
+        while (!m_commands.empty())
+            m_commands.pop();
+    }
+
     bool pop(commandName& name) {
         if (!m_commands.empty()) {
             name = m_commands.front();
@@ -27,11 +32,6 @@ public:
         }
 
         return false;
-    }
-
-    virtual void clear() {
-        while (!m_commands.empty())
-            m_commands.pop();
     }
 
 private:
@@ -44,28 +44,38 @@ public:
     :   m_command_pack_size(commandPackSize)
     { }
 
-    void subscribe(AbstractObserver& obs) {
+    void scan_input() {
+        for (size_t i = 0; i < m_command_pack_size; i++) {
+            commandName name;
+            std::getline(std::cin, name);
+            push_string(name);
+        }
+
+        notify();
+    }
+
+    void subscribe(AbstractQueueObserver* obs) {
         m_observers.push_back(obs);
     }
 
 private:
     void push_string(const commandName& name) const {
-        for (const auto& obs : m_observers)
-            obs.add(name);
+        for (auto& obs : m_observers)
+            obs->add(name);
     }
 
     void notify() {
-        for (const auto& obs : m_observers)
-            obs.process();
+        for (auto& obs : m_observers)
+            obs->process();
     }
 
     void abort() {
-        for (const auto& obs : m_observers)
-            obs.clear();
+        for (auto& obs : m_observers)
+            obs->clear();
     }
 
 private:
-    std::vector<AbstractQueueObserver&> m_observers;
+    std::vector<AbstractQueueObserver*> m_observers;
     size_t m_command_pack_size;
 };
 
@@ -92,8 +102,20 @@ public:
     ~CommandLog() override = default;
 
     void process() override {
+        using std::to_string;
+        using std::chrono::duration_cast;
+        using std::chrono::seconds;
+
         m_os.open("bulk" +
-                  std::chrono::duration_cast<std::chrono::seconds>());
+                  to_string(duration_cast<seconds>(m_time_point.time_since_epoch()).count()) +
+                  ".log");
+
+        commandName name;
+        while (pop(name)) {
+            m_os << name << std::endl;
+        }
+
+        m_os.close();
     }
 
     void add(const commandName& name) override {
@@ -121,11 +143,13 @@ private:
 
 class CommandHandler {
 public:
-    CommandHandler(size_t commandPackSize)
+    explicit CommandHandler(size_t commandPackSize)
     :   m_reader(commandPackSize)
     {
-        m_reader.subscribe(m_processor);
-        m_reader.subscribe(m_log);
+        m_reader.subscribe(&m_processor);
+        m_reader.subscribe(&m_log);
+
+        m_reader.scan_input();
     }
 
 private:
