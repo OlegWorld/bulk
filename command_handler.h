@@ -12,71 +12,72 @@ using commandName = std::string;
 class AbstractQueueObserver {
 public:
     virtual ~AbstractQueueObserver() = default;
-
     virtual void process() = 0;
-
-    virtual void add(const commandName& name) {
-        m_commands.push(name);
-    }
-
-    virtual void clear() {
-        while (!m_commands.empty())
-            m_commands.pop();
-    }
-
-    bool pop(commandName& name) {
-        if (!m_commands.empty()) {
-            name = m_commands.front();
-            m_commands.pop();
-            return true;
-        }
-
-        return false;
-    }
-
-private:
-    std::queue<commandName> m_commands;
+    virtual void add(const commandName& name) = 0;
+    virtual void clear() = 0;
 };
+
+class ReaderState;
+class NormalState;
+class BracedState;
 
 class CommandReader {
 public:
-    explicit CommandReader(size_t commandPackSize)
-    :   m_command_pack_size(commandPackSize)
-    { }
+    explicit CommandReader(size_t commandPackSize);
 
-    void scan_input() {
-        for (size_t i = 0; i < m_command_pack_size; i++) {
-            commandName name;
-            std::getline(std::cin, name);
-            push_string(name);
-        }
+    ~CommandReader();
 
-        notify();
-    }
+    void scan_input();
 
-    void subscribe(AbstractQueueObserver* obs) {
-        m_observers.push_back(obs);
-    }
+    void subscribe(AbstractQueueObserver* obs);
+
+    void push_string(const commandName& name) const;
+
+    void notify();
+
+    void abort();
+
+    void switch_state();
 
 private:
-    void push_string(const commandName& name) const {
-        for (auto& obs : m_observers)
-            obs->add(name);
-    }
-
-    void notify() {
-        for (auto& obs : m_observers)
-            obs->process();
-    }
-
-    void abort() {
-        for (auto& obs : m_observers)
-            obs->clear();
-    }
-
-private:
+    ReaderState* m_current_state;
+    ReaderState* m_other_state;
     std::vector<AbstractQueueObserver*> m_observers;
-    size_t m_command_pack_size;
+};
+
+class ReaderState {
+public:
+    virtual ~ReaderState() = default;
+    virtual void open_brace(CommandReader*) = 0;
+    virtual void close_brace(CommandReader*) = 0;
+    virtual void read_commands(CommandReader*) = 0;
+    virtual void commands_ended(CommandReader*) = 0;
+};
+
+class NormalState : public ReaderState {
+public:
+    explicit NormalState(size_t commandPackSize);
+    ~NormalState() override = default;
+    void open_brace(CommandReader* reader) override;
+    void close_brace(CommandReader* reader) override;
+    void read_commands(CommandReader* reader) override;
+    void commands_ended(CommandReader* reader) override;
+
+private:
+    const size_t m_command_pack_size;
+};
+
+class BracedState : public ReaderState {
+public:
+    BracedState();
+    ~BracedState() override = default;
+    void open_brace(CommandReader* reader) override;
+    void close_brace(CommandReader* reader) override;
+    void read_commands(CommandReader* reader) override;
+    void commands_ended(CommandReader* reader) override;
+
+private:
+    size_t m_brace_counter;
 };
 
 class CommandProcessor : public AbstractQueueObserver {
@@ -88,12 +89,26 @@ public:
         std::cout << "bulk: ";
 
         commandName name;
-        while (pop(name)) {
-            std::cout << name << ", ";
+        while (!m_commands.empty()) {
+            name = m_commands.front();
+            m_commands.pop();
+            std::cout << name << (m_commands.empty() ? "" : ", ");
         }
 
         std::cout << std::endl;
     }
+
+    void add(const commandName& name) override {
+        m_commands.push(name);
+    }
+
+    void clear() override {
+        while (!m_commands.empty())
+            m_commands.pop();
+    }
+
+private:
+    std::queue<commandName> m_commands;
 };
 
 class CommandLog : public AbstractQueueObserver {
@@ -111,7 +126,9 @@ public:
                   ".log");
 
         commandName name;
-        while (pop(name)) {
+        while (!m_commands.empty()) {
+            name = m_commands.front();
+            m_commands.pop();
             m_os << name << std::endl;
         }
 
@@ -124,7 +141,7 @@ public:
             m_begin_mark = true;
         }
 
-        AbstractQueueObserver::add(name);
+        m_commands.push(name);
     }
 
     void clear() override {
@@ -132,10 +149,12 @@ public:
             m_begin_mark = false;
         }
 
-        AbstractQueueObserver::clear();
+        while (!m_commands.empty())
+            m_commands.pop();
     }
 
 private:
+    std::queue<commandName> m_commands;
     std::ofstream m_os;
     std::chrono::time_point<std::chrono::system_clock> m_time_point;
     bool m_begin_mark;
