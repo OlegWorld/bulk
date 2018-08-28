@@ -3,8 +3,8 @@
 #include "command_handler.h"
 
 
-int main() {
-    CommandHandler(3);
+int main(int argc, char** argv) {
+    CommandHandler(std::stoul(argv[1]));
 
     return 0;
 }

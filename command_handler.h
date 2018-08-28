@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <memory>
 
 using commandName = std::string;
 
@@ -25,7 +26,7 @@ class CommandReader {
 public:
     explicit CommandReader(size_t commandPackSize);
 
-    ~CommandReader();
+    ~CommandReader() = default;
 
     void scan_input();
 
@@ -40,8 +41,8 @@ public:
     void switch_state();
 
 private:
-    ReaderState* m_current_state;
-    ReaderState* m_other_state;
+    std::unique_ptr<ReaderState> m_current_state;
+    std::unique_ptr<ReaderState> m_other_state;
     std::vector<AbstractQueueObserver*> m_observers;
 };
 
@@ -50,8 +51,7 @@ public:
     virtual ~ReaderState() = default;
     virtual void open_brace(CommandReader*) = 0;
     virtual void close_brace(CommandReader*) = 0;
-    virtual void read_commands(CommandReader*) = 0;
-    virtual void commands_ended(CommandReader*) = 0;
+    virtual bool read_commands(CommandReader*) = 0;
 };
 
 class NormalState : public ReaderState {
@@ -60,8 +60,7 @@ public:
     ~NormalState() override = default;
     void open_brace(CommandReader* reader) override;
     void close_brace(CommandReader* reader) override;
-    void read_commands(CommandReader* reader) override;
-    void commands_ended(CommandReader* reader) override;
+    bool read_commands(CommandReader* reader) override;
 
 private:
     const size_t m_command_pack_size;
@@ -73,8 +72,7 @@ public:
     ~BracedState() override = default;
     void open_brace(CommandReader* reader) override;
     void close_brace(CommandReader* reader) override;
-    void read_commands(CommandReader* reader) override;
-    void commands_ended(CommandReader* reader) override;
+    bool read_commands(CommandReader* reader) override;
 
 private:
     size_t m_brace_counter;
@@ -85,27 +83,11 @@ public:
     CommandProcessor() = default;
     ~CommandProcessor() override = default;
 
-    void process() override {
-        std::cout << "bulk: ";
+    void process() override;
 
-        commandName name;
-        while (!m_commands.empty()) {
-            name = m_commands.front();
-            m_commands.pop();
-            std::cout << name << (m_commands.empty() ? "" : ", ");
-        }
+    void add(const commandName& name) override;
 
-        std::cout << std::endl;
-    }
-
-    void add(const commandName& name) override {
-        m_commands.push(name);
-    }
-
-    void clear() override {
-        while (!m_commands.empty())
-            m_commands.pop();
-    }
+    void clear() override;
 
 private:
     std::queue<commandName> m_commands;
@@ -116,60 +98,22 @@ public:
     CommandLog() = default;
     ~CommandLog() override = default;
 
-    void process() override {
-        using std::to_string;
-        using std::chrono::duration_cast;
-        using std::chrono::seconds;
+    void process() override;
 
-        m_os.open("bulk" +
-                  to_string(duration_cast<seconds>(m_time_point.time_since_epoch()).count()) +
-                  ".log");
+    void add(const commandName& name) override;
 
-        commandName name;
-        while (!m_commands.empty()) {
-            name = m_commands.front();
-            m_commands.pop();
-            m_os << name << std::endl;
-        }
-
-        m_os.close();
-    }
-
-    void add(const commandName& name) override {
-        if (!m_begin_mark) {
-            m_time_point = std::chrono::system_clock::now();
-            m_begin_mark = true;
-        }
-
-        m_commands.push(name);
-    }
-
-    void clear() override {
-        if (m_begin_mark) {
-            m_begin_mark = false;
-        }
-
-        while (!m_commands.empty())
-            m_commands.pop();
-    }
+    void clear() override;
 
 private:
     std::queue<commandName> m_commands;
     std::ofstream m_os;
     std::chrono::time_point<std::chrono::system_clock> m_time_point;
-    bool m_begin_mark;
+    bool m_begin_mark = false;
 };
 
 class CommandHandler {
 public:
-    explicit CommandHandler(size_t commandPackSize)
-    :   m_reader(commandPackSize)
-    {
-        m_reader.subscribe(&m_processor);
-        m_reader.subscribe(&m_log);
-
-        m_reader.scan_input();
-    }
+    explicit CommandHandler(size_t commandPackSize);
 
 private:
     CommandReader           m_reader;
