@@ -4,8 +4,8 @@ project(bulk)
 find_package(GTest REQUIRED)
 find_package (Threads REQUIRED)
 
-add_executable(bulk main.cpp command_handler.cpp command_handler.h)
-add_executable(bulk_test command_handler.h command_handler.cpp test.cpp)
+add_executable(bulk main.cpp command_handler.cpp command_handler.h command_reader.h command_reader.cpp command_processors.h command_processors.cpp abstract_observer.h)
+add_executable(bulk_test test.cpp command_handler.cpp command_handler.h command_reader.h command_reader.cpp command_processors.h command_processors.cpp)
 
 target_include_directories(bulk_test PRIVATE ${GTEST_INCLUDE_DIRS})
 
